@@ -14,7 +14,7 @@ class Perhaps extends \Illuminate\Support\Facades\Facade
      */
     protected static function getFacadeAccessor()
     {
-        return 'perhaps';
+        return Perhaps::class;
     }
 
 }
