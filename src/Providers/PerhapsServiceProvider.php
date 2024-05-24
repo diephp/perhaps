@@ -11,12 +11,12 @@ class PerhapsServiceProvider extends ServiceProvider
 {
     public function register()
     {
-        $this->app->singleton(Perhaps::class, function () {
-            return app(PerhapsService::class, [
-                app(LoggerInterface::class),
-                config('perhaps.errorLogType', 'warning'),
-                config('perhaps.excludeExceptions', [])
-            ]);
+        $this->app->singleton(Perhaps::class, function ($app) {
+            return new PerhapsService(
+                $app->make(LoggerInterface::class),
+                $app['config']->get('perhaps.errorLogType', 'warning'),
+                $app['config']->get('perhaps.excludeExceptions', [])
+            );
         });
     }
 
