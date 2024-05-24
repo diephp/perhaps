@@ -18,14 +18,14 @@ A Laravel package that provides a simple way to retry any logic with customizabl
     ],
     ```
    or for laravel 11+ add Provider to list in bootstrap/providers.php
-3. 
-    ```php
-    return [
-        App\Providers\AppServiceProvider::class,
-        ...
-        \DiePHP\Perhaps\Providers\PerhapsServiceProvider::class,
-    ];
-    ```
+3.
+ ```php
+ return [
+     App\Providers\AppServiceProvider::class,
+     ...
+     \DiePHP\Perhaps\Providers\PerhapsServiceProvider::class,
+ ];
+ ```
 
 3. Optionally, publish the package configuration:
     ```sh
@@ -108,6 +108,3 @@ This package is open-source software licensed under the [MIT license](LICENSE).
 - You can specify a delay sequence for custom delay logic between retries.
 - Register the service provider and optionally publish the configuration for customization.
 - Use the provided facade for easy access to the `retry` method in your Laravel application.
-
-
-
