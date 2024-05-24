@@ -7,7 +7,7 @@ use Exception;
 use Illuminate\Support\ServiceProvider;
 use Psr\Log\LoggerInterface;
 
-class RequestXmlServiceProvider extends ServiceProvider
+class PerhapsServiceProvider extends ServiceProvider
 {
     public function register()
     {
