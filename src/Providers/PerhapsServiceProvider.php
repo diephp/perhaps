@@ -37,7 +37,7 @@ class PerhapsServiceProvider extends ServiceProvider
     {
         $this->publishes([
             __DIR__ . '/../config/perhaps.php' => config_path('perhaps.php'),
-        ]);
+        ], 'perhaps');
 
     }
 
