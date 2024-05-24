@@ -1,0 +1,31 @@
+<?php
+
+namespace DiePHP\Perhaps\Providers;
+
+use DiePHP\Perhaps\Services\PerhapsService;
+use Exception;
+use Illuminate\Support\ServiceProvider;
+use Psr\Log\LoggerInterface;
+
+class RequestXmlServiceProvider extends ServiceProvider
+{
+    public function register()
+    {
+        $this->app->singleton(\Perhaps::class, function () {
+            return app(PerhapsService::class, [
+                app(LoggerInterface::class),
+                []
+            ]);
+        });
+    }
+
+
+    public function provides()
+    {
+        return [
+            \Perhaps::class,
+        ];
+    }
+
+
+}
