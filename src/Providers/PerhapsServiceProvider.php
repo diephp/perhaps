@@ -14,8 +14,8 @@ class PerhapsServiceProvider extends ServiceProvider
         $this->app->singleton(Perhaps::class, function () {
             return app(PerhapsService::class, [
                 app(LoggerInterface::class),
-                config('perhaps.excludeExceptions', []),
-                config('perhaps.errorLogType', 'warning')
+                config('perhaps.errorLogType', 'warning'),
+                config('perhaps.excludeExceptions', [])
             ]);
         });
     }
