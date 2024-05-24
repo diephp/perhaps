@@ -48,11 +48,13 @@ class PerhapsService
                 }
 
                 if ($this->logger) {
-                    $this->logger->warning("Perhaps::retry `$iter`/`$trys` catch: ".$exception->getMessage(), [
+                    $this->logger->warning("Perhaps::retry `$iter`/`$trys` catch: ".$exception->getMessage(), \array_filter([
                         'delay'    => $delay,
-                        'sequence' => $delaySequence ? basename(get_class($delaySequence)) : null,
+                        'sequence' => is_object($delaySequence)
+                            ? \basename(\str_replace("\\", "/", \get_class($delaySequence)))
+                            : null,
                         'previous' => $exception->getPrevious(),
-                    ]);
+                    ]));
                 }
 
                 \usleep($delay);
