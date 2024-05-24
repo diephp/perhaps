@@ -16,14 +16,27 @@ class PerhapsService
 
     private array            $excludeExceptions = [];
 
+    private string           $errorLogType      = 'warning';
+
+    /**
+     * Constructor method for the class.
+     * @param LoggerInterface|null $logger            The logger instance for logging errors. Pass null to disable
+     *                                                logging.
+     * @param string               $errorLogType      The type of error logging to be performed. Default value is
+     *                                                'warning'.
+     * @param array                $excludeExceptions The list of exceptions to be excluded from error logging. Default
+     *                                                value is an empty array.
+     * @return void
+     */
     public function __construct(
         LoggerInterface $logger = null,
+        string          $errorLogType = 'warning',
         array           $excludeExceptions = []
-
     )
     {
         $this->logger = $logger;
         $this->excludeExceptions = $excludeExceptions;
+        $this->errorLogType = $errorLogType;
     }
 
     /**
@@ -37,7 +50,7 @@ class PerhapsService
      */
     public function retry(callable $function, int $trys = 2, Traversable $delaySequence = null)
     {
-        $delay = (int) $delaySequence ? $delaySequence->current() : 0;
+        $delay = intval($delaySequence ? $delaySequence->current() : 0);
 
         for ($iter = 1; $iter <= $trys; $iter++) {
             try {
@@ -48,13 +61,13 @@ class PerhapsService
                 }
 
                 if ($this->logger) {
-                    $this->logger->warning($exception->getMessage(), [
+                    $this->logger->{$this->errorLogType}("Perhaps::retry `$iter`/`$trys` catch: ".$exception->getMessage(), \array_filter([
                         'delay'    => $delay,
-                        'iter'     => $iter,
-                        'trys'     => $trys,
-                        'sequence' => $delaySequence ? get_class($delaySequence) : $delaySequence,
+                        'sequence' => is_object($delaySequence)
+                            ? \basename(\str_replace("\\", "/", \get_class($delaySequence)))
+                            : null,
                         'previous' => $exception->getPrevious(),
-                    ]);
+                    ]));
                 }
 
                 \usleep($delay);
