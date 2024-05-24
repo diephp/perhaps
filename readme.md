@@ -18,14 +18,13 @@ A Laravel package that provides a simple way to retry any logic with customizabl
     ],
     ```
    or for laravel 11+ add Provider to list in bootstrap/providers.php
-3.
- ```php
- return [
-     App\Providers\AppServiceProvider::class,
-     ...
-     \DiePHP\Perhaps\Providers\PerhapsServiceProvider::class,
- ];
- ```
+     ```php
+     return [
+         App\Providers\AppServiceProvider::class,
+         ...
+         \DiePHP\Perhaps\Providers\PerhapsServiceProvider::class,
+     ];
+     ```
 
 3. Optionally, publish the package configuration:
     ```sh
