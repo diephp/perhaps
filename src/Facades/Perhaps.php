@@ -3,7 +3,7 @@
 namespace DiePHP\Perhaps\Facades;
 
 /**
- * @method static retry(callable $function, int $trys = 2, Traversable $delaySequence = null)
+ * @method static retry(callable $function, int $trys = 2, \Traversable $delaySequence = null)
  */
 class Perhaps extends \Illuminate\Support\Facades\Facade
 {
