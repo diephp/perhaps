@@ -16,14 +16,24 @@ class PerhapsService
 
     private array            $excludeExceptions = [];
 
+    private string           $errorLogType = 'warning';
+
+    /**
+     * Constructor method for the class.
+     * @param LoggerInterface|null $logger            The logger instance for logging errors. Pass null to disable logging.
+     * @param string               $errorLogType      The type of error logging to be performed. Default value is 'warning'.
+     * @param array                $excludeExceptions The list of exceptions to be excluded from error logging. Default value is an empty array.
+     * @return void
+     */
     public function __construct(
         LoggerInterface $logger = null,
+        string $errorLogType = 'warning',
         array           $excludeExceptions = []
-
     )
     {
         $this->logger = $logger;
         $this->excludeExceptions = $excludeExceptions;
+        $this->errorLogType = $errorLogType;
     }
 
     /**
@@ -48,7 +58,7 @@ class PerhapsService
                 }
 
                 if ($this->logger) {
-                    $this->logger->warning("Perhaps::retry `$iter`/`$trys` catch: ".$exception->getMessage(), \array_filter([
+                    $this->logger->{$this->errorLogType}("Perhaps::retry `$iter`/`$trys` catch: ".$exception->getMessage(), \array_filter([
                         'delay'    => $delay,
                         'sequence' => is_object($delaySequence)
                             ? \basename(\str_replace("\\", "/", \get_class($delaySequence)))

@@ -4,7 +4,6 @@ namespace DiePHP\Perhaps\Providers;
 
 use DiePHP\Perhaps\Services\PerhapsService;
 use DiePHP\Perhaps\Facades\Perhaps;
-use Exception;
 use Illuminate\Support\ServiceProvider;
 use Psr\Log\LoggerInterface;
 
@@ -15,9 +14,15 @@ class PerhapsServiceProvider extends ServiceProvider
         $this->app->singleton(Perhaps::class, function () {
             return app(PerhapsService::class, [
                 app(LoggerInterface::class),
-                []
+                config('perhaps.excludeExceptions', []),
+                config('perhaps.errorLogType', 'warning')
             ]);
         });
+    }
+
+    public function boot ()
+    {
+        $this->publishConfigs();
     }
 
 
@@ -26,6 +31,14 @@ class PerhapsServiceProvider extends ServiceProvider
         return [
             Perhaps::class,
         ];
+    }
+
+    protected function publishConfigs(): void
+    {
+        $this->publishes([
+            __DIR__ . '/../config/perhaps.php' => config_path('perhaps.php'),
+        ]);
+
     }
 
 
