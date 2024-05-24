@@ -37,7 +37,7 @@ class PerhapsService
      */
     public function retry(callable $function, int $trys = 2, Traversable $delaySequence = null)
     {
-        $delay = (int) $delaySequence ? $delaySequence->current() : 0;
+        $delay = intval($delaySequence ? $delaySequence->current() : 0);
 
         for ($iter = 1; $iter <= $trys; $iter++) {
             try {
