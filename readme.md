@@ -1,3 +1,8 @@
+<p align="center">
+<a href="https://packagist.org/packages/diephp/perhaps"><img src="https://img.shields.io/packagist/dt/diephp/perhaps" alt="Total Downloads"></a>
+<a href="https://packagist.org/packages/diephp/perhaps"><img src="https://img.shields.io/packagist/v/diephp/perhaps" alt="Latest Stable Version"></a>
+<a href="https://packagist.org/packages/diephp/perhaps"><img src="https://img.shields.io/packagist/l/diephp/perhaps" alt="License"></a>
+</p>
 
 # Perhaps Retry Library
 
