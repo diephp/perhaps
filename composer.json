@@ -15,7 +15,7 @@
     ],
     "require": {
         "php": "^7.4 || ^8.0",
-        "diephp/sequences": "^1.0",
+        "diephp/sequences": "^1.3",
         "psr/log": "^2.0 || ^3.0"
     },
     "require-dev": {
