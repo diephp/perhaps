@@ -29,7 +29,7 @@ class PerhapsService
      * @return void
      */
     public function __construct(
-        LoggerInterface $logger = null,
+        ?LoggerInterface $logger = null,
         string          $errorLogType = 'warning',
         array           $excludeExceptions = []
     )
@@ -48,7 +48,7 @@ class PerhapsService
      * @throws \Exception When an exception occurs and is not excluded.
      * @throws \Exception When all retries fail.
      */
-    public function retry(callable $function, int $trys = 2, Traversable $delaySequence = null)
+    public function retry(callable $function, int $trys = 2, ?Traversable $delaySequence = null)
     {
         $delay = intval($delaySequence ? $delaySequence->current() : 0);
 
