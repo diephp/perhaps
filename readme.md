@@ -6,74 +6,155 @@
 
 # Perhaps Retry Library
 
-A Laravel package that provides a simple way to retry any logic with customizable attempts and delays. This can be particularly useful in scenarios where certain operations might fail due to transient issues, such as network errors or temporary service outages.
+Perhaps is a retry library for Laravel `9` to `13` and for plain PHP projects without Laravel.
+
+It helps you safely repeat operations that may fail temporarily: HTTP requests, external API calls, synchronization tasks, background jobs, cron processes, connections, and other unstable integrations. Instead of failing immediately, you can retry the same action several times and control the delay between attempts.
+
+## Why use this package
+
+The main advantage of `diephp/perhaps` is support for a `Traversable` delay sequence.
+
+That means you are not limited to a single fixed delay between retries. You can pass a sequence where every next retry uses its own interval. This is especially useful when working with external services that may:
+
+- respond with temporary errors;
+- become unavailable for a short time;
+- recover gradually after overload;
+- require a softer backoff strategy instead of aggressive repeated requests.
+
+With `delaySequence` you can describe growing retry intervals using mathematical sequences such as logarithmic, progressive, exponential, random, or any custom iterator that implements `Traversable`.
+
+This can be more flexible than Laravel's built-in retry helper when you need a fully described retry schedule instead of one repeated delay value.
 
 ## Installation
 
-1. Install the package via Composer:
-    ```sh
-    composer require diephp/perhaps
-    ```
+Install the package with Composer:
 
-2. Register the service provider in your `config/app.php` file:
-    ```php
-    'providers' => [
-        // ...
-        \DiePHP\Perhaps\Providers\PerhapsServiceProvider::class,
-    ],
-    ```
-   or for laravel 11+ add Provider to list in bootstrap/providers.php
-     ```php
-     return [
-         App\Providers\AppServiceProvider::class,
-         ...
-         \DiePHP\Perhaps\Providers\PerhapsServiceProvider::class,
-     ];
-     ```
+```sh
+composer require diephp/perhaps
+```
 
-3. Optionally, publish the package configuration:
-    ```sh
-    php artisan vendor:publish --tag=perhaps
-    ```
+## Laravel Installation
+
+### Laravel 9-11
+
+Register the service provider in `config/app.php`:
+
+```php
+'providers' => [
+    // ...
+    DiePHP\Perhaps\Providers\PerhapsServiceProvider::class,
+],
+```
+
+### Laravel v12, v13+
+
+Register the provider in `bootstrap/providers.php`:
+
+```php
+<?php
+
+return [
+    App\Providers\AppServiceProvider::class, // standard Laravel provider
+    // ...
+    DiePHP\Perhaps\Providers\PerhapsServiceProvider::class, // Perhaps provider
+];
+```
+
+### Optional configuration publish
+
+If you want to customize logging or excluded exceptions, publish the config:
+
+```sh
+php artisan vendor:publish --tag=perhaps
+```
+
+## Usage Without Laravel
+
+This package can also be used without Laravel. In that case, just create the service manually:
+
+```php
+use DiePHP\Perhaps\Services\PerhapsService;
+
+$perhaps = new PerhapsService();
+
+$perhaps->retry(function () {
+    // Your logic here
+}, 3);
+```
+
+You can also pass your own PSR logger, log level, and excluded exception list through the constructor if needed.
 
 ## Usage
 
-### Basic Usage
-
-The main function provided by this package is `Perhaps::retry`. You can use it to retry any logic with a specified number of attempts.
+### Basic Laravel usage
 
 ```php
 use DiePHP\Perhaps\Facades\Perhaps;
 
-Perhaps::retry(function() {
+$result = Perhaps::retry(function () {
     // Your logic here
-}, 3); // Retry 3 times
+    return $this->apiService->getData();
+}, 3);
 ```
 
-### Handling Delays
+The callback receives the current attempt number:
 
-You can also specify a delay sequence using a `Traversable` iterator. This allows you to define custom delay logic between retries.
-you can see details on https://github.com/diephp/sequences
+```php
+Perhaps::retry(function (int $attempt) {
+    if ($attempt < 3) {
+        throw new Exception('Temporary failure');
+    }
+
+    return 'Success';
+}, 5);
+```
+
+### Basic PHP usage
+
+```php
+use DiePHP\Perhaps\Services\PerhapsService;
+
+$perhaps = new PerhapsService();
+
+$result = $perhaps->retry(function (int $attempt) {
+    if ($attempt < 3) {
+        throw new RuntimeException('API is temporarily unavailable');
+    }
+
+    return 'ok';
+}, 5);
+```
+
+## Delay Sequences
+
+You can pass any `Traversable` object as the third argument of `retry()`.
+
+Each value from the sequence is used as a delay before the next retry. Delays are passed to `usleep()`, so the values are in microseconds.
+
+This is useful when:
+
+- you are sending requests to external APIs that may recover after a short pause;
+- you need to retry jobs or cron synchronization tasks with different intervals;
+- you want a gradual backoff instead of repeating requests too aggressively;
+- you want to keep retrying without failing too early during temporary incidents.
+
+Our sequence library: [diephp/sequences](https://github.com/diephp/sequences)
 
 ## LogarithmicSequence
+
 ```php
 use DiePHP\Perhaps\Facades\Perhaps;
 use DiePHP\Sequences\LogarithmicSequence;
 
-Perhaps::retry(function() {
+Perhaps::retry(function () {
     // Your logic here
-}, 10, new LogarithmicSequence(1000000, 100)); // Retry 10 times with logarithmicSequence delay
+}, 10, new LogarithmicSequence(1000000, 100));
 ```
-### Simple Explanation:
-Each value in the sequence is derived from multiplying the previous value by a logarithmic growth factor, which depends on the configured percentage. Squaring the factor introduces a faster scaling effect, and rounding ensures integer progression.
-The **result on the 10th iteration** will exceed **3 hours**, which means that by this point, the total time represented by the sequence will have grown significantly.
-This feature of the `LogarithmicSequence` can be quite useful when working with remote services that may become temporarily unavailable. In such cases:
-- You may not want to **abandon already processed data**, especially if its collection or processing took a considerable effort.
-- Instead, the logarithmic growth helps you **wait longer between retries**, which increases the likelihood of success without wasting too much CPU time or bandwidth in continual attempts.
 
-This makes it possible to gracefully handle **delays** and **resilience** in long-running processes when interacting with unreliable external services.
+`LogarithmicSequence` is useful when each next retry should wait noticeably longer than the previous one. This works well for unstable remote services where immediate repeated retries would only increase load and still fail.
 
-### Retry result table by LogarithmicSequence(1000000, 100)
+### Retry result table by `LogarithmicSequence(1000000, 100)`
+
 | **Microseconds** | **Seconds** | **Minutes** | **Hours** |
 | --- | --- | --- | --- |
 | 1,000,000 | 1 | 0.02 | 0.0003 |
@@ -88,28 +169,19 @@ This makes it possible to gracefully handle **delays** and **resilience** in lon
 | 13,076,904,567 | 13,076.90 | 217.948 | 3.6325 |
 
 ## ProgressiveSequence
+
 ```php
 use DiePHP\Perhaps\Facades\Perhaps;
 use DiePHP\Sequences\ProgressiveSequence;
 
-Perhaps::retry(function() {
+Perhaps::retry(function () {
     // Your logic here
-}, 20, new ProgressiveSequence(1000000, 100)); // Retry 10 times with progressive delay
+}, 20, new ProgressiveSequence(1000000, 100));
 ```
-### **How `ProgressiveSequence` works (in words)**:
-The `ProgressiveSequence` is a number sequence generator where each value grows progressively based on a fixed starting value and a percentage increment.
-1. **Starting Value**: The sequence starts with a given base value (`start`).
-2. **Growth By Percentage**: For each iteration:
-   - The increment is calculated as a percentage of the starting value (`start`).
-   - This percentage-based increment grows proportionally with the iteration number, meaning each next value adds **more** than the previous iteration.
 
-3. **Round Calculation**: The calculated result is rounded to the nearest integer to avoid fractional values.
-4. **Behavior Over Iterations**: Since the increment grows with each step, the sequence becomes larger and larger — forming a **progressive growth trend**.
+`ProgressiveSequence` grows step by step and is useful when you want retry delays to increase steadily without becoming too aggressive too early.
 
-### **Key Difference from `LogarithmicSequence`**:
-While `LogarithmicSequence` grows based on a logarithmic scaling factor, which slows down over time, the `ProgressiveSequence` grows linearly and **increases consistently** by a calculated percentage.
-### **Microseconds Conversion Table**
-Here’s the conversion of the provided microseconds values into seconds, minutes, and hours as requested:
+### Retry result table by `ProgressiveSequence(1000000, 100)`
 
 | **Microseconds** | **Seconds** | **Minutes** | **Hours** |
 | --- | --- | --- | --- |
@@ -135,14 +207,18 @@ Here’s the conversion of the provided microseconds values into seconds, minute
 | 191,000,000 | 191 | 3.18 | 0.0531 |
 
 ## RandSequence
+
 ```php
 use DiePHP\Perhaps\Facades\Perhaps;
 use DiePHP\Sequences\RandSequence;
 
-Perhaps::retry(function() {
+Perhaps::retry(function () {
     // Your logic here
 }, 10, new RandSequence(1000000, 90000000));
 ```
+
+`RandSequence` can be useful when you want to avoid sending retries at predictable fixed intervals.
+
 | **Microseconds** | **Seconds** | **Minutes** | **Hours** |
 | --- | --- | --- | --- |
 | 2,000,000 | 2.00 | 0.03 | 0.0006 |
@@ -156,19 +232,18 @@ Perhaps::retry(function() {
 | 25,867,048 | 25.87 | 0.43 | 0.0072 |
 | 5,976,423 | 5.98 | 0.10 | 0.0017 |
 
-
-
 ## ExponentialSequence
+
 ```php
 use DiePHP\Perhaps\Facades\Perhaps;
 use DiePHP\Sequences\ExponentialSequence;
 
-Perhaps::retry(function() {
+Perhaps::retry(function () {
     // Your logic here
 }, 10, new ExponentialSequence(10, 100));
 ```
-- **Exponential Growth**: Unlike linear or logarithmic sequences, this formula ensures that the numbers grow at an increasingly rapid pace. Each iteration introduces a massively larger value than the previous one.
-- **Practical Usage**: Such sequences are most often used in scenarios where values need to expand exponentially, such as in backoff strategies or modeling growth over time.
+
+`ExponentialSequence` is suitable when each new retry should back off much more aggressively than the previous one.
 
 | **Microseconds** | **Seconds** | **Minutes** | **Hours** |
 | --- | --- | --- | --- |
@@ -183,40 +258,42 @@ Perhaps::retry(function() {
 | 25,600,000,000 | 25,600.00 | 426.67 | 7.1111 |
 | 512,000,000,000 | 512,000.00 | 8,533.33 | 142.222 |
 
-
-# Example with Exception Handling
-
-In this example, the retry logic will handle exceptions and log the retry attempts.
+## Example With Exception Handling
 
 ```php
-Perhaps::retry(function($attempt) {
+use DiePHP\Perhaps\Facades\Perhaps;
+
+Perhaps::retry(function (int $attempt) {
     if ($attempt < 3) {
-        throw new \Exception("Simulated failure");
+        throw new Exception('Simulated failure');
     }
-    // Successful operation
-    echo "Success on attempt $attempt";
-}, 5); // Retry 5 times
+
+    echo "Success on attempt {$attempt}";
+}, 5);
 ```
-***
+
 ```php
+use DiePHP\Perhaps\Facades\Perhaps;
+use DiePHP\Sequences\LogarithmicSequence;
+
 Perhaps::retry(function () use ($data) {
-    History::create($data); // example
+    History::create($data);
 }, 3, new LogarithmicSequence(1000000, 70));
 ```
 
 ## Configuration
 
-You can configure the package by modifying the published configuration file `config/perhaps.php`. This allows you to customize the logging and exception handling behavior.
+If you publish the config, you can customize:
 
+- `errorLogType`
+- `excludeExceptions`
+
+Configuration file:
+
+```php
+config/perhaps.php
+```
 
 ## License
 
 This package is open-source software licensed under the [MIT license](LICENSE).
-
-
-### Key Points
-
-- The `retry` method allows you to retry any callable logic a specified number of times.
-- You can specify a delay sequence for custom delay logic between retries.
-- Register the service provider and optionally publish the configuration for customization.
-- Use the provided facade for easy access to the `retry` method in your Laravel application.

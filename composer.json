@@ -3,7 +3,8 @@
     "description": "Catch and Retry Code Execution",
     "keywords": [
       "catch",
-      "retry"
+      "retry",
+      "laravel"
     ],
     "type": "library",
     "license": "MIT",

@@ -2,8 +2,8 @@
 
 namespace DiePHP\Perhaps\Providers;
 
-use DiePHP\Perhaps\Services\PerhapsService;
 use DiePHP\Perhaps\Facades\Perhaps;
+use DiePHP\Perhaps\Services\PerhapsService;
 use Illuminate\Support\ServiceProvider;
 use Psr\Log\LoggerInterface;
 
@@ -20,7 +20,7 @@ class PerhapsServiceProvider extends ServiceProvider
         });
     }
 
-    public function boot ()
+    public function boot()
     {
         $this->publishConfigs();
     }
