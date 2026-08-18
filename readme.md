@@ -10,6 +10,24 @@ Perhaps is a retry library for Laravel `9` to `13` and for plain PHP projects wi
 
 It helps you safely repeat operations that may fail temporarily: HTTP requests, external API calls, synchronization tasks, background jobs, cron processes, connections, and other unstable integrations. Instead of failing immediately, you can retry the same action several times and control the delay between attempts.
 
+## Contents
+
+- [Why use this package](#why-use-this-package)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Laravel Installation](#laravel-installation)
+- [Usage](#usage)
+- [API Reference](#api-reference)
+- [Retry Behaviour](#retry-behaviour)
+- [Delay Sequences](#delay-sequences)
+- [Custom Sequences](#custom-sequences)
+- [Excluding Exceptions](#excluding-exceptions)
+- [Logging](#logging)
+- [Configuration](#configuration)
+- [Practical Recipes](#practical-recipes)
+- [Testing](#testing)
+- [License](#license)
+
 ## Why use this package
 
 The main advantage of `diephp/perhaps` is support for a `Traversable` delay sequence.
@@ -25,6 +43,17 @@ With `delaySequence` you can describe growing retry intervals using mathematical
 
 This can be more flexible than Laravel's built-in retry helper when you need a fully described retry schedule instead of one repeated delay value.
 
+## Requirements
+
+| Requirement | Version |
+| --- | --- |
+| PHP | `^7.4` or `^8.0` |
+| `diephp/sequences` | `^1.3` (installed automatically) |
+| `psr/log` | `^2.0` or `^3.0` (installed automatically) |
+| Laravel | `9` – `13` (optional, only for the facade and service provider) |
+
+Laravel is **not** a dependency. The core service works in any PHP project; only `DiePHP\Perhaps\Facades\Perhaps` and `DiePHP\Perhaps\Providers\PerhapsServiceProvider` require `illuminate/support`.
+
 ## Installation
 
 Install the package with Composer:
@@ -34,6 +63,8 @@ composer require diephp/perhaps
 ```
 
 ## Laravel Installation
+
+The provider is not auto-discovered, so register it manually.
 
 ### Laravel 9-11
 
@@ -68,22 +99,6 @@ If you want to customize logging or excluded exceptions, publish the config:
 php artisan vendor:publish --tag=perhaps
 ```
 
-## Usage Without Laravel
-
-This package can also be used without Laravel. In that case, just create the service manually:
-
-```php
-use DiePHP\Perhaps\Services\PerhapsService;
-
-$perhaps = new PerhapsService();
-
-$perhaps->retry(function () {
-    // Your logic here
-}, 3);
-```
-
-You can also pass your own PSR logger, log level, and excluded exception list through the constructor if needed.
-
 ## Usage
 
 ### Basic Laravel usage
@@ -111,6 +126,8 @@ Perhaps::retry(function (int $attempt) {
 
 ### Basic PHP usage
 
+This package can also be used without Laravel. In that case, just create the service manually:
+
 ```php
 use DiePHP\Perhaps\Services\PerhapsService;
 
@@ -124,6 +141,77 @@ $result = $perhaps->retry(function (int $attempt) {
     return 'ok';
 }, 5);
 ```
+
+You can also pass your own PSR logger, log level, and excluded exception list through the constructor if needed.
+
+### Resolving the service in Laravel
+
+The service provider binds the configured singleton under the **facade** class name, so resolve it either through the facade or through that key:
+
+```php
+use DiePHP\Perhaps\Facades\Perhaps;
+use DiePHP\Perhaps\Services\PerhapsService;
+
+$perhaps = app(Perhaps::class);        // singleton built from config/perhaps.php
+$perhaps->retry(fn () => doWork());
+```
+
+> Injecting `PerhapsService` directly (constructor injection or `app(PerhapsService::class)`) gives you a fresh instance that is **not** built from `config/perhaps.php`. Use the facade or `app(Perhaps::class)` when you rely on `errorLogType` / `excludeExceptions`.
+
+## API Reference
+
+### `PerhapsService::__construct()`
+
+```php
+public function __construct(
+    ?LoggerInterface $logger = null,
+    string $errorLogType = 'warning',
+    array $excludeExceptions = []
+)
+```
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `$logger` | `?Psr\Log\LoggerInterface` | `null` | PSR-3 logger for failed attempts. `null` disables logging entirely. |
+| `$errorLogType` | `string` | `'warning'` | Logger method called for every failed attempt (`debug`, `info`, `notice`, `warning`, `error`, `critical`, `alert`, `emergency`). |
+| `$excludeExceptions` | `array` | `[]` | Exception class names that must never be retried. |
+
+### `PerhapsService::retry()`
+
+```php
+public function retry(
+    callable $function,
+    int $trys = 2,
+    ?Traversable $delaySequence = null
+)
+```
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `$function` | `callable` | — | The operation to execute. Receives the current attempt number (`int`, starting at `1`). |
+| `$trys` | `int` | `2` | Maximum number of attempts, **not** the number of extra retries. `retry($fn, 3)` calls `$fn` at most 3 times. |
+| `$delaySequence` | `?Traversable` | `null` | Delay source. Each value is used as a **microsecond** pause. `null` means no pause between attempts. |
+
+**Returns:** whatever the callback returns, as soon as it returns without throwing.
+
+**Throws:**
+
+- the exception from the last failed attempt, when all attempts failed;
+- the caught exception immediately, when its class is listed in `$excludeExceptions`;
+- `DiePHP\Perhaps\Exceptions\PerhapsException` when `$trys` is `0` or negative, since no attempt was ever made.
+
+## Retry Behaviour
+
+Knowing the exact semantics avoids surprises in production:
+
+1. **Attempts, not retries.** `$trys` is the total number of calls. With `$trys = 2` (default), the callback runs at most twice.
+2. **Attempt counter.** The callback always receives the 1-based attempt number, which is handy for logging or for changing strategy on later attempts.
+3. **Only `\Exception` is retried.** The library catches `\Exception`. PHP errors (`\Error`, `\TypeError`, `\DivisionByZeroError`, …) are **not** caught and abort retrying immediately — a programming mistake should not be repeated 10 times.
+4. **Exclusions are matched by exact class name.** `excludeExceptions` uses a strict class comparison, so a subclass of a listed exception is still retried. List every concrete class you want to bail out on.
+5. **The original exception is re-thrown.** After the final failed attempt the last exception is re-thrown untouched, so your existing `catch` blocks and error reporting keep working. It is never wrapped in `PerhapsException`.
+6. **Delays are microseconds.** Values from the sequence go straight to `usleep()`. `1000000` = 1 second.
+7. **The delay is applied after every failed attempt, including the last one.** With long backoff sequences the very last pause happens before the exception is re-thrown, so plan `$trys` and the sequence with your job/request timeout in mind.
+8. **Short sequences degrade to no delay.** If the sequence yields fewer values than `$trys`, the remaining attempts run without pause instead of failing.
 
 ## Delay Sequences
 
@@ -139,6 +227,21 @@ This is useful when:
 - you want to keep retrying without failing too early during temporary incidents.
 
 Our sequence library: [diephp/sequences](https://github.com/diephp/sequences)
+
+### Choosing a sequence
+
+| Sequence | Constructor | Growth | Good for |
+| --- | --- | --- | --- |
+| `LinearSequence` | `($start, $amount)` | fixed step: `100, 150, 200, …` | predictable, evenly spaced retries |
+| `ProgressiveSequence` | `($start, $percentage)` | steady, accelerating | jobs that usually recover within minutes |
+| `LogarithmicSequence` | `($start, $percentage)` | strong, smooth | unstable remote services, long incidents |
+| `ExponentialSequence` | `($start, $percentage)` | very aggressive | rare background retries over hours |
+| `FibonacciSequence` | `($start)` | each value is the sum of the two previous | a middle ground between linear and exponential |
+| `RandSequence` | `($minValue, $maxValue)` | random inside the range | avoiding predictable retry storms |
+| `UniqRandSequence` | `($minValue, $maxValue)` | random, without repeating a value | jitter without duplicate intervals |
+| `InfiniteSequence` | `($start)` | endless `+1` counter: `100, 101, 102, …` | practically constant delay for any `$trys` |
+
+Check the exact semantics in [diephp/sequences](https://github.com/diephp/sequences) before relying on a specific curve.
 
 ## LogarithmicSequence
 
@@ -258,7 +361,154 @@ Perhaps::retry(function () {
 | 25,600,000,000 | 25,600.00 | 426.67 | 7.1111 |
 | 512,000,000,000 | 512,000.00 | 8,533.33 | 142.222 |
 
-## Example With Exception Handling
+## Custom Sequences
+
+Any `Traversable` works, so you are never limited to the bundled sequences.
+
+### A fixed schedule
+
+```php
+Perhaps::retry(function () {
+    return $this->api->send($payload);
+}, 4, new ArrayIterator([
+    500000,  // 0.5s before the 2nd attempt
+    2000000, // 2s before the 3rd attempt
+    5000000, // 5s before the 4th attempt
+]));
+```
+
+### A generator with jitter
+
+```php
+$backoffWithJitter = (function () {
+    $delay = 250000; // 0.25s
+
+    while (true) {
+        yield $delay + random_int(0, 100000);
+        $delay *= 2;
+    }
+})();
+
+Perhaps::retry(fn () => $this->api->send($payload), 6, $backoffWithJitter);
+```
+
+Generators are `Traversable`, so they can describe an endless backoff schedule while `$trys` keeps the total number of attempts bounded.
+
+## Excluding Exceptions
+
+Some failures will never succeed on a second attempt: validation errors, `404`, `401`, business-rule violations. Retrying them only wastes time. List them so they are re-thrown at once, without a delay and without a log entry:
+
+```php
+use DiePHP\Perhaps\Services\PerhapsService;
+
+$perhaps = new PerhapsService($logger, 'warning', [
+    InvalidArgumentException::class,
+    App\Exceptions\PaymentDeclinedException::class,
+]);
+```
+
+In Laravel the same list lives in `config/perhaps.php`:
+
+```php
+'excludeExceptions' => [
+    InvalidArgumentException::class,
+    App\Exceptions\PaymentDeclinedException::class,
+],
+```
+
+Remember that matching is by exact class name — subclasses are not covered automatically.
+
+## Logging
+
+When a logger is supplied, every failed attempt produces one entry through the configured level:
+
+```
+Perhaps::retry `1`/`3` catch: Connection timed out
+```
+
+The context array contains only the values that are actually available:
+
+| Key | Description |
+| --- | --- |
+| `delay` | The pause in microseconds applied after this attempt. Omitted when there is no delay. |
+| `sequence` | Short class name of the delay sequence, for example `LogarithmicSequence`. Omitted without a sequence. |
+| `previous` | The previous exception, when the caught exception wraps one. Omitted otherwise. |
+
+Successful attempts are never logged, and the final re-thrown exception is left to your application's error handler.
+
+Any PSR-3 logger works:
+
+```php
+use DiePHP\Perhaps\Services\PerhapsService;
+use Monolog\Handler\StreamHandler;
+use Monolog\Logger;
+
+$logger = new Logger('retry');
+$logger->pushHandler(new StreamHandler('php://stdout'));
+
+$perhaps = new PerhapsService($logger, 'notice');
+```
+
+## Configuration
+
+If you publish the config, you can customize:
+
+- `errorLogType` — the PSR-3 level used to report failed attempts;
+- `excludeExceptions` — exception classes that must not be retried.
+
+Configuration file `config/perhaps.php`:
+
+```php
+return [
+
+    'excludeExceptions' => [],
+
+    'errorLogType' => 'warning',
+
+];
+```
+
+In Laravel the logger is resolved from the container (`Psr\Log\LoggerInterface`), so failed attempts land in your regular application log.
+
+## Practical Recipes
+
+### HTTP call to an unstable API
+
+```php
+use DiePHP\Perhaps\Facades\Perhaps;
+use DiePHP\Sequences\ProgressiveSequence;
+use Illuminate\Support\Facades\Http;
+
+$response = Perhaps::retry(function (int $attempt) {
+    return Http::timeout(5)->throw()->get('https://api.example.com/orders')->json();
+}, 4, new ProgressiveSequence(500000, 100));
+```
+
+### Queued job that should not fail on a temporary glitch
+
+```php
+use DiePHP\Perhaps\Facades\Perhaps;
+use DiePHP\Sequences\LogarithmicSequence;
+
+public function handle(): void
+{
+    Perhaps::retry(function () {
+        History::create($this->data);
+    }, 3, new LogarithmicSequence(1000000, 70));
+}
+```
+
+### Retry with a different strategy on later attempts
+
+```php
+Perhaps::retry(function (int $attempt) {
+    $timeout = $attempt * 5;
+
+    return $this->client->withTimeout($timeout)->fetch();
+}, 3, new ArrayIterator([1000000, 3000000]));
+```
+
+### Example with exception handling
 
 ```php
 use DiePHP\Perhaps\Facades\Perhaps;
@@ -272,28 +522,15 @@ Perhaps::retry(function (int $attempt) {
 }, 5);
 ```
 
-```php
-use DiePHP\Perhaps\Facades\Perhaps;
-use DiePHP\Sequences\LogarithmicSequence;
+## Testing
 
-Perhaps::retry(function () use ($data) {
-    History::create($data);
-}, 3, new LogarithmicSequence(1000000, 70));
+```sh
+composer install
+composer test
 ```
 
-## Configuration
-
-If you publish the config, you can customize:
-
-- `errorLogType`
-- `excludeExceptions`
-
-Configuration file:
-
-```php
-config/perhaps.php
-```
+The suite covers attempt counting, exception re-throwing, exclusions, log levels and context, and delay-sequence handling.
 
 ## License
 
-This package is open-source software licensed under the [MIT license](LICENSE).
+This package is open-source software licensed under the [MIT license](LICENSE.md).

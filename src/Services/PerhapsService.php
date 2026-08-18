@@ -74,7 +74,7 @@ class PerhapsService
 
                 if ($delaySequence) {
                     $delaySequence->next();
-                    $delay = $delaySequence->current();
+                    $delay = intval($delaySequence->current());
                 }
 
             }
